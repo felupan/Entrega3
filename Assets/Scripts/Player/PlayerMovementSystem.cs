@@ -1,5 +1,6 @@
 using System;
 using ScriptableObjects;
+using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.Serialization;
@@ -10,21 +11,32 @@ namespace Player
     {
         [Header("ScriptableObjects")] 
         [SerializeField] private InputReaderSO inputReader;
-    
+
+        [SerializeField] private TMP_Text speedText;
+        
         [Header("Movement")] 
         [SerializeField] private float movementSpeed;
         [SerializeField] private float jumpHeight;
         [SerializeField] private float gravityScale;
         [SerializeField] private float maxSpeed;
-        [SerializeField] private float airAcceleration = 0.1f;
-        [SerializeField] private float maxAirMomentum = 0.2f;
+        
+        [Header("Acceleration")]
+        [SerializeField] private float airAcceleration;
+        [SerializeField] private float maxAirMomentum;
+        [SerializeField] private float groundAcceleration;
+        [SerializeField] private float airControl;
+        
+        [Header("Decay")]
+        [SerializeField] private float airDecay;
+        [SerializeField] private float groundDecay;
 
         [Header("Dash")]
         [SerializeField] private int dashMaxCharges;
         [SerializeField] private float dashTime;
         [SerializeField] private float dashImpulse;
-        [SerializeField] private float airDecay = 2f;
-        [SerializeField] private float groundDecay = 5f;
+        [SerializeField] private float dashDuration;
+        private bool isDashing;
+        private float dashDurationTimer;
         private float dashTimer;
 
         [Header("Ground Detection")]
@@ -35,10 +47,11 @@ namespace Player
         private int dashCharges;
 
         private Vector3 movementMomentum;
+        private Vector3 dashMomentum;
         private bool isGrounded;
         private Vector2 inputVector;
         private Vector3 verticalMovement;
-        
+
         protected override void Awake()
         {
             base.Awake();
@@ -81,6 +94,13 @@ namespace Player
         ApplyGravity();
         MoveAndRotate();
         HandleDashCooldown();
+        DashDecay();
+        
+        if (isDashing)
+        {
+            dashDurationTimer -= Time.deltaTime;
+            if (dashDurationTimer <= 0) isDashing = false;
+        }
     }
 
     private void MoveAndRotate()
@@ -97,24 +117,30 @@ namespace Player
             movement = direction * speed;
         }
 
-        if (!isGrounded)
+        if (isGrounded)
         {
-            Vector3 airContribution = movement * airAcceleration;
-            if (airContribution.magnitude > maxAirMomentum)
-                airContribution = airContribution.normalized * maxAirMomentum;
-            movementMomentum += airContribution;
+            movementMomentum = Vector3.Lerp(movementMomentum, movement, groundAcceleration * Time.deltaTime);
         }
-        
-        float currentDecay = isGrounded ? groundDecay : airDecay;
-        if (movementMomentum.magnitude > maxSpeed)
-            movementMomentum = movementMomentum.normalized * maxSpeed;
-        movementMomentum = Vector3.Lerp(movementMomentum, Vector3.zero, currentDecay * Time.deltaTime);
+        else
+        {
+            if (inputVector.sqrMagnitude > 0)
+                movementMomentum = Vector3.Lerp(movementMomentum, movement, airControl * Time.deltaTime);
+            else
+                movementMomentum = Vector3.Lerp(movementMomentum, Vector3.zero, airDecay * Time.deltaTime);
+        }
         if (movementMomentum.magnitude < 0.01f) movementMomentum = Vector3.zero;
-        main.Controller.Move((movement + verticalMovement + movementMomentum) * Time.deltaTime);
+
+        Vector3 totalMomentum = movementMomentum + dashMomentum;
+        if (totalMomentum.magnitude > maxSpeed)
+            totalMomentum = totalMomentum.normalized * maxSpeed;
+        main.Controller.Move((totalMomentum + verticalMovement) * Time.deltaTime);
+        speedText.SetText($"Speed: {Mathf.RoundToInt(totalMomentum.magnitude)}");
     }
 
     private void ApplyGravity()
     {
+        if (isDashing) return;
+        
         if (isGrounded && verticalMovement.y < 0)
         {
             verticalMovement.y = -2f;
@@ -129,6 +155,9 @@ namespace Player
     {
         if (dashCharges <= 0) return;
         
+        isDashing = true;
+        dashDurationTimer = dashDuration;
+        
         Vector3 direction;
         if (inputVector.sqrMagnitude > 0)
         {
@@ -142,7 +171,21 @@ namespace Player
         
         main.CameraSystem.ApplyDashFovEffect(direction);
         //dashCharges--;
-        movementMomentum += direction.normalized * dashImpulse;
+        dashMomentum += direction.normalized * dashImpulse;
+    }
+
+    private void DashDecay()
+    {
+        if (isGrounded)
+        {
+            dashMomentum = Vector3.Lerp(dashMomentum, Vector3.zero, groundDecay * Time.deltaTime);
+            
+        }
+        else
+        {
+            dashMomentum = Vector3.Lerp(dashMomentum, Vector3.zero, airDecay * Time.deltaTime);
+        }
+        if (dashMomentum.magnitude < 0.01f) dashMomentum = Vector3.zero;
     }
 
     private void HandleDashCooldown()

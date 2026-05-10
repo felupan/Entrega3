@@ -21,11 +21,6 @@ namespace Player
         
         private float currentFov;
 
-        protected override void Awake()
-        {
-            base.Awake();
-        }
-
         private void Start()
         {
             main.CineCam.Lens.FieldOfView = baseFov;
@@ -37,10 +32,7 @@ namespace Player
             main.CineCam.Lens.FieldOfView = currentFov;
             cameraTilt.localEulerAngles = targetTilt;
             
-            if (currentFov > baseFov)
-            {
-                currentFov = Mathf.Lerp(currentFov, baseFov, fovReturnTime * Time.deltaTime);
-            }
+            currentFov = Mathf.Lerp(currentFov, baseFov, fovReturnTime * Time.deltaTime);
 
             if (targetTilt.sqrMagnitude > 0)
             {
@@ -50,7 +42,7 @@ namespace Player
 
         public void ApplyDashFovEffect(Vector3 direction)
         {
-            targetTilt = new Vector3(direction.z * tiltAmount, 0, -direction.x * tiltAmount);
+            targetTilt = new Vector3(direction.z * tiltAmount, 0, 0);
             currentFov = dashFov;
         }
     }
