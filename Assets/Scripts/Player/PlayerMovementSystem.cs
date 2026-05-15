@@ -3,6 +3,7 @@ using ScriptableObjects;
 using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.Rendering;
 using UnityEngine.Serialization;
 
 namespace Player
@@ -32,10 +33,9 @@ namespace Player
 
         [Header("Dash")]
         [SerializeField] private int dashMaxCharges;
-        [SerializeField] private float dashTime;
+        [SerializeField] private float dashRechargeTime;
         [SerializeField] private float dashImpulse;
         [SerializeField] private float dashDuration;
-        private bool isDashing;
         private float dashDurationTimer;
         private float dashTimer;
 
@@ -44,13 +44,19 @@ namespace Player
         [SerializeField] private float detectionRadius;
         [SerializeField] private LayerMask whatIsGround;
 
+        public bool IsSlowMotion { get; private set; }
+        public bool IsDashing { get; private set; }
+        public bool IsGrounded { get; private set; }
+        
         private int dashCharges;
 
         private Vector3 movementMomentum;
         private Vector3 dashMomentum;
-        private bool isGrounded;
         private Vector2 inputVector;
         private Vector3 verticalMovement;
+
+        private float currentTimeScale;
+        private float targetTimeScale = 1f;
 
         protected override void Awake()
         {
@@ -60,157 +66,183 @@ namespace Player
             Cursor.lockState = CursorLockMode.Locked;
         }
 
-    private void OnEnable()
-    {
-        inputReader.OnJumpStarted += Jump;
-        inputReader.OnMoveEvent += UpdateMovement;
-        inputReader.OnDashStarted += Dash;
-        
-    }
-
-    private void OnDisable()
-    {
-        inputReader.OnJumpStarted -= Jump;
-        inputReader.OnMoveEvent -= UpdateMovement;
-        inputReader.OnDashStarted -= Dash;
-    }
-
-    private void UpdateMovement(Vector2 input)
-    {
-        inputVector = input;
-    }
-    
-    private void Jump()
-    {
-        if (isGrounded)
+        private void OnEnable()
         {
-            verticalMovement.y = Mathf.Sqrt(-2 * gravityScale * jumpHeight);
+            inputReader.OnJumpStarted += Jump;
+            inputReader.OnMoveEvent += UpdateMovement;
+            inputReader.OnDashStarted += Dash;
+            inputReader.OnAimStarted += StartSlowMotion;
+            inputReader.OnAimCancel += StopSlowMotion;
         }
-    }
 
-    void Update()
-    {
-        GroundCheck();
-        ApplyGravity();
-        MoveAndRotate();
-        HandleDashCooldown();
-        DashDecay();
-        
-        if (isDashing)
+        private void OnDisable()
         {
-            dashDurationTimer -= Time.deltaTime;
-            if (dashDurationTimer <= 0) isDashing = false;
+            inputReader.OnJumpStarted -= Jump;
+            inputReader.OnMoveEvent -= UpdateMovement;
+            inputReader.OnDashStarted -= Dash;
+            inputReader.OnAimStarted -= StartSlowMotion;
+            inputReader.OnAimCancel -= StopSlowMotion;
         }
-    }
 
-    private void MoveAndRotate()
-    {
-        transform.rotation = Quaternion.Euler(0, main.Cam.transform.eulerAngles.y, 0);
-        Vector3 movement = Vector3.zero;
-        
-        if (inputVector.sqrMagnitude > 0)
+        private void UpdateMovement(Vector2 input)
         {
-            float angle = Mathf.Atan2(inputVector.x, inputVector.y) * Mathf.Rad2Deg + main.Cam.transform.eulerAngles.y;
-            float speed = movementSpeed * inputVector.magnitude;
-            Vector3 direction = Quaternion.Euler(0, angle, 0) * Vector3.forward;
+            inputVector = input;
+        }
+        
+        private void Jump()
+        {
+            if (IsGrounded)
+            {
+                verticalMovement.y = Mathf.Sqrt(-2 * gravityScale * jumpHeight);
+            }
+        }
+
+        void Update()
+        {
+            GroundCheck();
+            ApplyGravity();
+            MoveAndRotate();
+            HandleDashCooldown();
+
+            currentTimeScale = Mathf.Lerp(currentTimeScale, targetTimeScale, 10 * Time.unscaledDeltaTime);
+            Time.timeScale = currentTimeScale;
             
-            movement = direction * speed;
-        }
-
-        if (isGrounded)
-        {
-            movementMomentum = Vector3.Lerp(movementMomentum, movement, groundAcceleration * Time.deltaTime);
-        }
-        else
-        {
-            if (inputVector.sqrMagnitude > 0)
-                movementMomentum = Vector3.Lerp(movementMomentum, movement, airControl * Time.deltaTime);
+            if (IsDashing)
+            {
+                dashDurationTimer -= Time.deltaTime;
+                if (dashDurationTimer <= 0) IsDashing = false;
+            }
             else
-                movementMomentum = Vector3.Lerp(movementMomentum, Vector3.zero, airDecay * Time.deltaTime);
+            {
+                DashDecay();
+            }
         }
-        if (movementMomentum.magnitude < 0.01f) movementMomentum = Vector3.zero;
 
-        Vector3 totalMomentum = movementMomentum + dashMomentum;
-        if (totalMomentum.magnitude > maxSpeed)
-            totalMomentum = totalMomentum.normalized * maxSpeed;
-        main.Controller.Move((totalMomentum + verticalMovement) * Time.deltaTime);
-        speedText.SetText($"Speed: {Mathf.RoundToInt(totalMomentum.magnitude)}");
-    }
-
-    private void ApplyGravity()
-    {
-        if (isDashing) return;
-        
-        if (isGrounded && verticalMovement.y < 0)
+        private void MoveAndRotate()
         {
-            verticalMovement.y = -2f;
+            transform.rotation = Quaternion.Euler(0, main.Cam.transform.eulerAngles.y, 0);
+            Vector3 movement = Vector3.zero;
+            
+            if (inputVector.sqrMagnitude > 0)
+            {
+                float angle = Mathf.Atan2(inputVector.x, inputVector.y) * Mathf.Rad2Deg + main.Cam.transform.eulerAngles.y;
+                float speedMultiplier = Mathf.Lerp(1f, 1f / Time.timeScale, 0.5f);
+                float speed = movementSpeed * inputVector.magnitude * speedMultiplier;
+                Vector3 direction = Quaternion.Euler(0, angle, 0) * Vector3.forward;
+                movement = direction * speed;
+            }
+            main.CameraSystem.UpdateTilt(movement.normalized);
+
+            if (!IsDashing)
+            {
+                if (IsGrounded)
+                {
+                    movementMomentum = Vector3.Lerp(movementMomentum, movement, groundAcceleration * Time.deltaTime);
+                }
+                else
+                {
+                    if (inputVector.sqrMagnitude > 0)
+                        movementMomentum = Vector3.Lerp(movementMomentum, movement, airControl * Time.deltaTime);
+                    else
+                        movementMomentum = Vector3.Lerp(movementMomentum, Vector3.zero, airDecay * Time.deltaTime);
+                }
+
+                if (movementMomentum.magnitude < 0.01f) movementMomentum = Vector3.zero;
+            }
+            else
+                movementMomentum = Vector3.zero;
+
+            Vector3 totalMovement = movementMomentum + dashMomentum;
+            if (totalMovement.magnitude >= maxSpeed)
+                totalMovement = totalMovement.normalized * maxSpeed;
+            
+            main.Controller.Move((totalMovement + verticalMovement) * Time.deltaTime);
+            
+            speedText.SetText($"Speed: {Mathf.RoundToInt(totalMovement.magnitude)}");
         }
-        else
-        {
-            verticalMovement.y += gravityScale * Time.deltaTime;
-        }
-    }
 
-    private void Dash()
-    {
-        if (dashCharges <= 0) return;
-        
-        isDashing = true;
-        dashDurationTimer = dashDuration;
-        
-        Vector3 direction;
-        if (inputVector.sqrMagnitude > 0)
+        private void ApplyGravity()
         {
+            if (IsDashing)
+            {
+                verticalMovement.y = 0;
+            }
+            
+            if (IsGrounded && verticalMovement.y < 0)
+            {
+                verticalMovement.y = -2f;
+            }
+            else
+            {
+                verticalMovement.y += gravityScale * Time.deltaTime;
+            }
+        }
+
+        private void Dash()
+        {
+            if (dashCharges <= 0) return;
+            
+            IsDashing = true;
+            dashDurationTimer = dashDuration;
+            
+            Vector3 direction;
+            
             float angle = Mathf.Atan2(inputVector.x, inputVector.y) * Mathf.Rad2Deg + main.Cam.transform.eulerAngles.y;
             direction = Quaternion.Euler(0, angle, 0) * Vector3.forward;
-        }
-        else
-        {
-            direction = main.Cam.transform.forward;
-        }
-        
-        main.CameraSystem.ApplyDashFovEffect(direction);
-        //dashCharges--;
-        dashMomentum += direction.normalized * dashImpulse;
-    }
-
-    private void DashDecay()
-    {
-        if (isGrounded)
-        {
-            dashMomentum = Vector3.Lerp(dashMomentum, Vector3.zero, groundDecay * Time.deltaTime);
             
+            main.CameraSystem.ApplyDashFovEffect(direction);
+            dashCharges--;
+            dashMomentum = direction.normalized * dashImpulse;
         }
-        else
+
+        private void DashDecay()
         {
-            dashMomentum = Vector3.Lerp(dashMomentum, Vector3.zero, airDecay * Time.deltaTime);
+            if (IsGrounded)
+            {
+                dashMomentum = Vector3.Lerp(dashMomentum, Vector3.zero, groundDecay * Time.deltaTime);
+            }
+            else
+            {
+                dashMomentum = Vector3.Lerp(dashMomentum, Vector3.zero, airDecay * Time.deltaTime);
+            }
+            if (dashMomentum.magnitude < 0.01f) dashMomentum = Vector3.zero;
         }
-        if (dashMomentum.magnitude < 0.01f) dashMomentum = Vector3.zero;
-    }
 
-    private void HandleDashCooldown()
-    {
-        if (dashCharges >= dashMaxCharges) return;
-        
-        dashTimer += Time.deltaTime;
-
-        if (!(dashTimer >= dashTime)) return;
-        
-        dashCharges++;
-        dashTimer = 0;
-    }
-
-    private void GroundCheck()
-    {
-        isGrounded = Physics.CheckSphere(feet.position, detectionRadius, whatIsGround);
-    }
-
-    private void OnDrawGizmos()
-    {
-        if (feet != null)
+        private void HandleDashCooldown()
         {
-            Gizmos.DrawSphere(feet.position, detectionRadius);
+            if (dashCharges >= dashMaxCharges) return;
+            
+            dashTimer += Time.deltaTime;
+
+            if (!(dashTimer >= dashRechargeTime)) return;
+            
+            dashCharges++;
+            dashTimer = 0;
         }
-    }
+
+        private void GroundCheck()
+        {
+            IsGrounded = Physics.CheckSphere(feet.position, detectionRadius, whatIsGround);
+        }
+
+        private void StartSlowMotion()
+        {
+            IsSlowMotion = true;
+            targetTimeScale = 0.1f;
+        }
+
+        private void StopSlowMotion()
+        {
+            IsSlowMotion = false;
+            targetTimeScale = 1f;
+        }
+
+        private void OnDrawGizmos()
+        {
+            if (feet != null)
+            {
+                Gizmos.DrawSphere(feet.position, detectionRadius);
+            }
+        }
     }
 }
