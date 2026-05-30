@@ -47,6 +47,7 @@ namespace Player
         public bool IsSlowMotion { get; private set; }
         public bool IsDashing { get; private set; }
         public bool IsGrounded { get; private set; }
+        public bool IsMoving { get; private set; }
         
         private int dashCharges;
 
@@ -68,20 +69,20 @@ namespace Player
 
         private void OnEnable()
         {
-            inputReader.OnJumpStarted += Jump;
-            inputReader.OnMoveEvent += UpdateMovement;
-            inputReader.OnDashStarted += Dash;
-            inputReader.OnAimStarted += StartSlowMotion;
-            inputReader.OnAimCancel += StopSlowMotion;
+            main.InputReader.OnJumpStarted += Jump;
+            main.InputReader.OnMoveEvent += UpdateMovement;
+            main.InputReader.OnDashStarted += Dash;
+            main.InputReader.OnAimStarted += StartSlowMotion;
+            main.InputReader.OnAimCancel += StopSlowMotion;
         }
 
         private void OnDisable()
         {
-            inputReader.OnJumpStarted -= Jump;
-            inputReader.OnMoveEvent -= UpdateMovement;
-            inputReader.OnDashStarted -= Dash;
-            inputReader.OnAimStarted -= StartSlowMotion;
-            inputReader.OnAimCancel -= StopSlowMotion;
+            main.InputReader.OnJumpStarted -= Jump;
+            main.InputReader.OnMoveEvent -= UpdateMovement;
+            main.InputReader.OnDashStarted -= Dash;
+            main.InputReader.OnAimStarted -= StartSlowMotion;
+            main.InputReader.OnAimCancel -= StopSlowMotion;
         }
 
         private void UpdateMovement(Vector2 input)
@@ -157,7 +158,9 @@ namespace Player
                 totalMovement = totalMovement.normalized * maxSpeed;
             
             main.Controller.Move((totalMovement + verticalMovement) * Time.deltaTime);
-            
+
+            if (totalMovement.sqrMagnitude <= 0.2) IsMoving = false;
+            else IsMoving = true;
             speedText.SetText($"Speed: {Mathf.RoundToInt(totalMovement.magnitude)}");
         }
 

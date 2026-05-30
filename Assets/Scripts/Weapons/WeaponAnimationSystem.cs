@@ -1,16 +1,36 @@
+using System;
+using Player;
 using UnityEngine;
 
-public class WeaponAnimationSystem : MonoBehaviour
+public class WeaponAnimationSystem : PlayerSystem
 {
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
-    void Start()
+    private static readonly int IsRunning = Animator.StringToHash("isRunning");
+    private static readonly int IsShooting = Animator.StringToHash("isShooting");
+    private Animator anim;
+
+    protected override void Awake()
     {
-        
+        base.Awake();
+        anim = GetComponent<Animator>();
     }
 
-    // Update is called once per frame
-    void Update()
+    private void OnEnable()
     {
-        
+        main.InputReader.OnShootStarted += ShootAnim;
+    }
+
+    private void OnDisable()
+    {
+        main.InputReader.OnShootStarted -= ShootAnim;
+    }
+
+    private void ShootAnim()
+    {
+        anim.SetTrigger(IsShooting);
+    }
+
+    private void Update()
+    {
+        anim.SetBool(IsRunning, main.MovementSystem.IsMoving);
     }
 }

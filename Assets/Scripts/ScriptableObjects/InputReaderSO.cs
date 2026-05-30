@@ -12,6 +12,7 @@ namespace ScriptableObjects
         public event Action OnAimStarted, OnAimCancel;
         public event Action OnDashStarted;
         public event Action<Vector2> OnMoveEvent;
+        public event Action<int> OnWeaponSwitch;
 
         private MyInputs inputs;
 
@@ -52,6 +53,21 @@ namespace ScriptableObjects
         public void OnDash(InputAction.CallbackContext context)
         {
             if (context.started) OnDashStarted?.Invoke();
+        }
+
+        public void OnWeapon1(InputAction.CallbackContext context)
+        {
+            if (context.started) OnWeaponSwitch?.Invoke(0);
+        }
+
+        public void OnWeapon2(InputAction.CallbackContext context)
+        {
+            if (context.started) OnWeaponSwitch?.Invoke(1);
+        }
+
+        public void OnWeapon3(InputAction.CallbackContext context)
+        {
+            if (context.started) OnWeaponSwitch?.Invoke(2);
         }
     }
 }
