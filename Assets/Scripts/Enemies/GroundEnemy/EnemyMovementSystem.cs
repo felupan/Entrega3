@@ -1,14 +1,30 @@
+using System;
 using UnityEngine;
 
 namespace Enemies.GroundEnemy
 {
     public class EnemyMovementSystem : EnemySystem
     {
-        [SerializeField] private GameObject target;
+        private Transform target;
+
+        private void Start()
+        {
+            main.Agent.stoppingDistance = 1;
+        }
+
+        private void OnEnable()
+        {
+            main.Health.OnDeath += StopMoving;
+        }
+
+        private void StopMoving()
+        {
+            main.Agent.speed = 0;
+        }
 
         private void Update()
         {
-            main.Agent.SetDestination(target.transform.position);
+            main.Agent.SetDestination(target.position);
 
             if (ReachedDestination())
             {
@@ -17,10 +33,15 @@ namespace Enemies.GroundEnemy
             }
             else main.Agent.isStopped = false;
         }
+        
+        public void SetTarget(Transform t)
+        {
+            target = t;
+        }
 
         private void FaceToTarget()
         {
-            Vector3 directionToTarget = (target.transform.position - transform.position).normalized;
+            Vector3 directionToTarget = (target.position - transform.position).normalized;
             directionToTarget.y = 0f;
         
             Quaternion rotationToTarget = Quaternion.LookRotation(directionToTarget);

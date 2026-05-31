@@ -1,3 +1,4 @@
+using DefaultNamespace.Interfaces;
 using ScriptableObjects;
 using Unity.Cinemachine;
 using UnityEngine;

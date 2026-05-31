@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using ScriptableObjects;
 using TMPro;
 using UnityEngine;
@@ -12,8 +13,6 @@ namespace Player
     {
         [Header("ScriptableObjects")] 
         [SerializeField] private InputReaderSO inputReader;
-
-        [SerializeField] private TMP_Text speedText;
         
         [Header("Movement")] 
         [SerializeField] private float movementSpeed;
@@ -36,6 +35,7 @@ namespace Player
         [SerializeField] private float dashRechargeTime;
         [SerializeField] private float dashImpulse;
         [SerializeField] private float dashDuration;
+        [SerializeField] private AudioClip dashSfx;
         private float dashDurationTimer;
         private float dashTimer;
 
@@ -43,6 +43,12 @@ namespace Player
         [SerializeField] private Transform feet;
         [SerializeField] private float detectionRadius;
         [SerializeField] private LayerMask whatIsGround;
+
+        [Header("SlowMotion")] 
+        [SerializeField] private int maxSlowMotion;
+        [SerializeField] private AudioClip addSlowMotionSfx;
+
+        private int currentSlowMotion;
 
         public bool IsSlowMotion { get; private set; }
         public bool IsDashing { get; private set; }
@@ -59,6 +65,9 @@ namespace Player
         private float currentTimeScale;
         private float targetTimeScale = 1f;
 
+        public static event Action<int, float> OnDashUpdate;
+        public static event Action<float> OnSlowMotionChange; 
+        
         protected override void Awake()
         {
             base.Awake();
@@ -74,8 +83,8 @@ namespace Player
             main.InputReader.OnDashStarted += Dash;
             main.InputReader.OnAimStarted += StartSlowMotion;
             main.InputReader.OnAimCancel += StopSlowMotion;
+            SpawnerManager.OnEnemyDeath += AddSlowMotion;
         }
-
         private void OnDisable()
         {
             main.InputReader.OnJumpStarted -= Jump;
@@ -83,6 +92,7 @@ namespace Player
             main.InputReader.OnDashStarted -= Dash;
             main.InputReader.OnAimStarted -= StartSlowMotion;
             main.InputReader.OnAimCancel -= StopSlowMotion;
+            SpawnerManager.OnEnemyDeath += AddSlowMotion;
         }
 
         private void UpdateMovement(Vector2 input)
@@ -161,7 +171,6 @@ namespace Player
 
             if (totalMovement.sqrMagnitude <= 0.2) IsMoving = false;
             else IsMoving = true;
-            speedText.SetText($"Speed: {Mathf.RoundToInt(totalMovement.magnitude)}");
         }
 
         private void ApplyGravity()
@@ -196,6 +205,7 @@ namespace Player
             main.CameraSystem.ApplyDashFovEffect(direction);
             dashCharges--;
             dashMomentum = direction.normalized * dashImpulse;
+            AudioManager.Instance.PlaySfx(dashSfx, 0.2f);
         }
 
         private void DashDecay()
@@ -217,10 +227,13 @@ namespace Player
             
             dashTimer += Time.deltaTime;
 
+            OnDashUpdate?.Invoke(dashCharges, dashTimer / dashRechargeTime);
+            
             if (!(dashTimer >= dashRechargeTime)) return;
             
             dashCharges++;
             dashTimer = 0;
+            
         }
 
         private void GroundCheck()
@@ -230,8 +243,10 @@ namespace Player
 
         private void StartSlowMotion()
         {
+            if (currentSlowMotion <= 0) return;
             IsSlowMotion = true;
             targetTimeScale = 0.1f;
+            StartCoroutine(RemoveSlowMotion());
         }
 
         private void StopSlowMotion()
@@ -245,6 +260,24 @@ namespace Player
             if (feet != null)
             {
                 Gizmos.DrawSphere(feet.position, detectionRadius);
+            }
+        }
+        
+        private void AddSlowMotion()
+        {
+            currentSlowMotion += 15;
+            if (currentSlowMotion >= 100) currentSlowMotion = 100;
+            OnSlowMotionChange?.Invoke((float)currentSlowMotion/maxSlowMotion);
+            AudioManager.Instance.PlaySfx(addSlowMotionSfx);
+        }
+
+        private IEnumerator RemoveSlowMotion()
+        {
+            while (IsSlowMotion)
+            {
+                currentSlowMotion -= 3;
+                OnSlowMotionChange?.Invoke((float)currentSlowMotion/maxSlowMotion);
+                yield return new WaitForSeconds(0.05f);
             }
         }
     }

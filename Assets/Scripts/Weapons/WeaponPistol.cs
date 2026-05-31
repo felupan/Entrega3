@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections;
+using System.Collections.Generic;
 using DefaultNamespace.Interfaces;
 using UnityEngine;
 
@@ -6,7 +8,9 @@ namespace Weapons
 {
     public class WeaponPistol : WeaponRange
     {
+        [SerializeField] private AudioClip shotSfx;
         private Vector3 endPoint;
+        
         protected override void OnShootCanceled(){}
 
         protected override void OnShoot()
@@ -28,6 +32,8 @@ namespace Weapons
             }
             
             SpawnTracer(muzzlePoint.position, endPoint, bulletSpeed);
+            
+            AudioManager.Instance.PlaySfx(shotSfx);
         }
     }
 }

@@ -16,7 +16,6 @@ namespace DefaultNamespace.Enemies
 
         public void TakeDamage(float damage)
         {
-            Debug.Log("Auch");
             currentHealth -= damage;
             if (currentHealth <= 0) Die();
         }
