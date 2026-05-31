@@ -14,6 +14,7 @@ public class DeathScene : MonoBehaviour
     {
         yield return new WaitForSeconds(4f);
         AudioManager.Instance.StopMusic();
+        Cursor.lockState = CursorLockMode.None;
         SceneManager.LoadScene("MainMenu");
     }
 }
